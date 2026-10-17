@@ -1,0 +1,12 @@
+{
+ "surum": 2,
+ "tekrar": 600000,
+ "aciklama": "Şifreli kasa. Her giriş bir kullanıcının kendi adı ve şifresiyle sarılmıştır.",
+ "anahtarlar": [
+  {
+   "id": "a0c04015fb99e5c8",
+   "tuz": "iQTaPVCtBqud7Y7XGBhOcg==",
+   "sarili": "Dhz1DnIQRGhjsc7bCsfFLCXdAyFsta10SDkTPEIwLx8uSCdwDUrm0IkyEwAiLbvDbO6oe21cich40PXG9OJ6IWJlY+O4+IaY4VvEP7LT6ev8ZrsE7gJrHrdp77Q1u+O6MgzuuXgSDvqDpbolZqEB2w2syHgOgeisJWABU5bs/5z6MQqHDAQX8QzLvnBqLCtr"
+  }
+ ]
+}

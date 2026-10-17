@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<title>Giriş · Akademik Koç</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%23C2334A'/></svg>">
+<style>
+  :root { --zemin: #f4f1ec; --kart: #ffffff; --yazi: #1f1b1a; --soluk: #6b625e; --vurgu: #c2334a; --vurgu2: #a3263b; --hata: #b3261e; --cizgi: #ddd6cf; --golge: 0 24px 60px -24px rgba(60, 20, 25, .35); }
+  @media (prefers-color-scheme: dark) {
+    :root { --zemin: #151313; --kart: #1f1c1c; --yazi: #efeae7; --soluk: #a89f9b; --vurgu: #e0566c; --vurgu2: #c94459; --hata: #f2867d; --cizgi: #3a3433; --golge: 0 24px 60px -24px rgba(0, 0, 0, .7); }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; color: var(--yazi);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif;
+    background: radial-gradient(circle at 15% 10%, rgba(194, 51, 74, .14), transparent 45%), radial-gradient(circle at 90% 90%, rgba(194, 51, 74, .10), transparent 40%), var(--zemin); }
+  form { width: 100%; max-width: 380px; background: var(--kart); border: 1px solid var(--cizgi); border-radius: 18px; padding: 28px 24px 22px; box-shadow: var(--golge); }
+  .logo { display: block; width: 52px; height: 52px; margin: 0 auto 10px; }
+  h1 { margin: 0; font-size: 1.45rem; font-weight: 700; text-align: center; }
+  p { margin: 4px 0 18px; color: var(--soluk); font-size: .9rem; text-align: center; }
+  label { display: block; font-size: .85rem; font-weight: 600; margin: 12px 0 6px; }
+  input[type=text], input[type=password] { width: 100%; padding: 10px 12px; font: inherit; border: 1px solid var(--cizgi); border-radius: 10px; background: transparent; color: var(--yazi); }
+  input:focus { outline: none; border-color: var(--vurgu); box-shadow: 0 0 0 3px rgba(194, 51, 74, .22); }
+  .hatirla { display: flex; gap: 8px; align-items: center; margin: 16px 0 18px; font-size: .88rem; font-weight: 400; color: var(--soluk); }
+  button { width: 100%; padding: 12px; font: inherit; font-weight: 700; border: 0; border-radius: 10px; color: #fff; cursor: pointer; background: var(--vurgu); }
+  button:hover { background: var(--vurgu2); }
+  button:disabled { opacity: .6; cursor: progress; }
+  #durum { min-height: 1.5em; margin: 14px 0 0; font-size: .9rem; text-align: center; }
+  #durum.hata { color: var(--hata); }
+  .kilit { margin-top: 12px; font-size: .78rem; color: var(--soluk); text-align: center; }
+</style>
+</head>
+<body>
+<form id="giris" autocomplete="on">
+  <svg class="logo" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24" fill="#c2334a"/><path d="M12 22 26 15l14 7-14 7z" fill="#fff"/><path d="M18 26v7c0 2.5 3.6 4.5 8 4.5s8-2 8-4.5v-7l-8 4z" fill="#fff" opacity=".85"/><path d="M38 23v9" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+  <h1>Akademik Koç</h1>
+  <p>Bu site şifrelidir. İçerik yalnızca tarayıcınızda çözülür.</p>
+  <label for="kullanici">Kullanıcı adı</label>
+  <input id="kullanici" type="text" autocomplete="username" autocapitalize="none" required autofocus>
+  <label for="parola">Şifre</label>
+  <input id="parola" type="password" autocomplete="current-password" required>
+  <label class="hatirla"><input id="kalici" type="checkbox"> Bu cihazda 30 gün açık kalsın (aksi hâlde 12 saat)</label>
+  <button id="dugme" type="submit">Giriş</button>
+  <div id="durum" role="status"></div>
+  <div class="kilit">🔒 AES-256 · kullanıcıya özel anahtar</div>
+</form>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const durum = (s, hata) => { $('durum').textContent = s; $('durum').className = hata ? 'hata' : ''; };
+  const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  const enc = new TextEncoder();
+  if (!('serviceWorker' in navigator) || !window.crypto || !crypto.subtle) {
+    durum('Bu tarayıcı (veya gizli pencere) gerekli özellikleri desteklemiyor. Güncel Chrome, Edge, Safari ya da normal pencerede Firefox kullanın.', true);
+    $('dugme').disabled = true;
+    return;
+  }
+  const kayit = navigator.serviceWorker.register('sw.js');
+
+  async function dene(giris, kullanici, parola, tekrar) {
+    const temel = await crypto.subtle.importKey('raw', enc.encode(`${kullanici}\u0000${parola}`), 'PBKDF2', false, ['deriveKey']);
+    const k = await crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt: b64(giris.tuz), iterations: tekrar }, temel, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const b = b64(giris.sarili);
+    try {
+      const duz = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.subarray(0, 12), additionalData: enc.encode('anahtar') }, k, b.subarray(12));
+      return { ...JSON.parse(new TextDecoder().decode(duz)), id: giris.id };
+    } catch { return null; }
+  }
+
+  $('giris').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('dugme').disabled = true;
+    durum('Doğrulanıyor… (birkaç saniye sürebilir)');
+    try {
+      const kasa = await (await fetch('kasa.json', { cache: 'no-cache' })).json();
+      const kullanici = $('kullanici').value.trim().toLocaleLowerCase('tr-TR');
+      // Tüm anahtarlar aynı anda denenir (telefonda daha hızlı)
+      const denemeler = (kasa.anahtarlar || []).map((g) => dene(g, kullanici, $('parola').value, kasa.tekrar));
+      const bulunan = await new Promise((tamam) => {
+        let kalan = denemeler.length;
+        if (!kalan) tamam(null);
+        const bitti = () => { kalan -= 1; if (!kalan) tamam(null); };
+        denemeler.forEach((d) => d.then((r) => (r ? tamam(r) : bitti()), bitti));
+      });
+      if (!bulunan) {
+        durum('Kullanıcı adı veya şifre hatalı.', true);
+        $('dugme').disabled = false;
+        $('parola').select();
+        return;
+      }
+      durum('Anahtar hazırlanıyor…');
+      const sure = (ms, mesaj) => new Promise((_, red) => setTimeout(() => red(new Error(mesaj)), ms));
+      await Promise.race([kayit, sure(15000, 'güvenlik bileşeni (service worker) yüklenemedi. Sayfayı yenileyip tekrar deneyin; uygulama içi tarayıcı (WhatsApp, Instagram vb.) yerine Chrome veya Safari kullanın.')]);
+      const reg = await Promise.race([navigator.serviceWorker.ready, sure(15000, 'güvenlik bileşeni etkinleşmedi. Sayfayı yenileyip tekrar deneyin.')]);
+      const kanal = new MessageChannel();
+      const yanit = new Promise((ok) => { kanal.port1.onmessage = (m) => ok(m.data); });
+      const ham = b64(bulunan.ham);
+      reg.active.postMessage({ tur: 'giris', ham: ham.buffer, uid: bulunan.u, entryId: bulunan.id, username: bulunan.n, kalici: $('kalici').checked }, [kanal.port2]);
+      const y = await Promise.race([yanit, sure(15000, 'anahtar bu tarayıcıda saklanamadı (gizli/özel pencere olabilir). Normal pencerede deneyin.')]);
+      if (!y || !y.ok) throw new Error((y && y.hata) || 'anahtar kaydedilemedi');
+      durum('Açılıyor…');
+      location.replace(location.pathname.replace(/index\.html$/, ''));
+    } catch (h) {
+      durum(`Giriş tamamlanamadı: ${h.message || h}`, true);
+      $('dugme').disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>
