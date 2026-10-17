@@ -1,6 +1,6 @@
 # akademi_site
 
-Akademik Koç (YKS akademik takip sistemi) arayüzünün şifreli yayın kopyası.
+TGM Öğrenci Takip Sistemi arayüzünün şifreli yayın kopyası.
 
 Adres: https://ramazan9838.github.io/akademi_site/
 

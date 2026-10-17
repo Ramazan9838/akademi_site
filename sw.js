@@ -12,6 +12,10 @@ const TURLER = {
 };
 const tur = (yol) => TURLER[yol.split('.').pop().toLowerCase()] || 'application/octet-stream';
 const metin = (s) => new TextEncoder().encode(s);
+// Yalnız şifreli statik dosyalar önbelleğe alınır. Güncel veritabanı hariçtir.
+const ONBELLEK = 'tgm-statik-43a6ec038a86986f';
+const statikMi = (yol) => yol.startsWith('assets/') ||
+  ['yerel/sunucu.zip', 'yerel/isci.js'].includes(yol);
 
 // ------------------------------------------------------------------ anahtar deposu (IndexedDB)
 // IndexedDB bütün <kullanıcı>.github.io sitelerince paylaşılır; karışmaması için ad sitenin yoluna bağlıdır.
@@ -43,7 +47,12 @@ async function cikis() { ANAHTAR = null; await depo('sil').catch(() => {}); }
 
 // ------------------------------------------------------------------ yaşam döngüsü ve mesajlar
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  await Promise.all((await caches.keys())
+    .filter((ad) => ad.startsWith('tgm-statik-') && ad !== ONBELLEK)
+    .map((ad) => caches.delete(ad)));
+  await self.clients.claim();
+})()));
 self.addEventListener('message', (e) => {
   const m = e.data || {};
   const cevapla = (v) => e.ports[0] && e.ports[0].postMessage(v);
@@ -79,7 +88,18 @@ async function cevap(istek, yol) {
     if (yol === 'index.html') return fetch(istek); // giriş sayfası
     return gezinme ? girise() : new Response('Giriş gerekli', { status: 401 });
   }
-  const r = await fetch(new URL(`k/${await dosyaAdi(a.mac, yol)}`, KAPSAM), { cache: 'no-cache' });
+  const sifreliUrl = new URL(`k/${await dosyaAdi(a.mac, yol)}`, KAPSAM);
+  let r;
+  if (statikMi(yol)) {
+    const onbellek = await caches.open(ONBELLEK);
+    r = await onbellek.match(sifreliUrl);
+    if (!r) {
+      r = await fetch(sifreliUrl, { cache: 'no-cache' });
+      if (r.ok) await onbellek.put(sifreliUrl, r.clone()).catch(() => {});
+    }
+  } else {
+    r = await fetch(sifreliUrl, { cache: 'no-cache' });
+  }
   if (!r.ok) {
     if (gezinme && yol === 'index.html') { await cikis(); return fetch(istek); }
     return new Response('Bulunamadı', { status: 404 });
