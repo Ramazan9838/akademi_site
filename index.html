@@ -5,12 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="light dark">
+<script>
+  try { var t = localStorage.getItem('ak.tema'); if (t === 'acik' || t === 'koyu') document.documentElement.dataset.theme = t === 'koyu' ? 'dark' : 'light'; } catch (e) {}
+</script>
 <title>Giriş · Akademik Koç</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='1' y='1' width='14' height='14' rx='4' fill='%234F46E5'/></svg>">
 <style>
   :root { --zemin: #f4f6fa; --kart: #ffffff; --yazi: #172038; --soluk: #606b80; --vurgu: #4f46e5; --vurgu2: #4338ca; --hata: #c82e4e; --cizgi: #e2e6ee; --golge: 0 24px 60px -24px rgba(30, 30, 80, .35); }
+  /* Tema seçimi uygulamayla ortaktır (localStorage "ak.tema"; bkz. frontend/src/tema.ts) */
+  :root[data-theme="dark"] { color-scheme: dark; --zemin: #0d1018; --kart: #161a26; --yazi: #e8ebf2; --soluk: #96a0b4; --vurgu: #8b84ff; --vurgu2: #7a72f5; --hata: #f06884; --cizgi: #293042; --golge: 0 24px 60px -24px rgba(0, 0, 0, .7); }
   @media (prefers-color-scheme: dark) {
-    :root { --zemin: #0d1018; --kart: #161a26; --yazi: #e8ebf2; --soluk: #96a0b4; --vurgu: #8b84ff; --vurgu2: #7a72f5; --hata: #f06884; --cizgi: #293042; --golge: 0 24px 60px -24px rgba(0, 0, 0, .7); }
+    :root:not([data-theme="light"]) { color-scheme: dark; --zemin: #0d1018; --kart: #161a26; --yazi: #e8ebf2; --soluk: #96a0b4; --vurgu: #8b84ff; --vurgu2: #7a72f5; --hata: #f06884; --cizgi: #293042; --golge: 0 24px 60px -24px rgba(0, 0, 0, .7); }
   }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; color: var(--yazi);
@@ -29,10 +34,15 @@
   button:disabled { opacity: .6; cursor: progress; }
   #durum { min-height: 1.5em; margin: 14px 0 0; font-size: .9rem; text-align: center; }
   #durum.hata { color: var(--hata); }
+  .tema { position: fixed; top: 14px; right: 14px; width: 40px; height: 40px; padding: 0; display: grid; place-items: center; border-radius: 12px;
+    background: var(--kart); color: var(--soluk); border: 1px solid var(--cizgi); box-shadow: 0 4px 14px rgba(0, 0, 0, .08); }
+  .tema:hover { background: var(--kart); color: var(--yazi); }
+  .tema svg { width: 18px; height: 18px; }
   .kilit { margin-top: 12px; font-size: .78rem; color: var(--soluk); text-align: center; }
 </style>
 </head>
 <body>
+<button type="button" class="tema" id="tema" aria-label="Temayı değiştir" title="Açık / koyu tema"></button>
 <form id="giris" autocomplete="on">
   <svg class="logo" viewBox="0 0 52 52" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#c82e4e"/></linearGradient></defs><rect x="2" y="2" width="48" height="48" rx="14" fill="url(#lg)"/><path d="M12 22 26 15l14 7-14 7z" fill="#fff"/><path d="M18 26v7c0 2.5 3.6 4.5 8 4.5s8-2 8-4.5v-7l-8 4z" fill="#fff" opacity=".85"/><path d="M38 23v9" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
   <h1>Akademik Koç</h1>
@@ -49,6 +59,19 @@
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
+  // Açık / koyu tema düğmesi
+  const GUNES = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+  const AY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  const koyuMu = () => document.documentElement.dataset.theme === 'dark'
+    || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+  const temaCiz = () => { $('tema').innerHTML = koyuMu() ? GUNES : AY; };
+  $('tema').addEventListener('click', () => {
+    const t = koyuMu() ? 'acik' : 'koyu';
+    document.documentElement.dataset.theme = t === 'koyu' ? 'dark' : 'light';
+    try { localStorage.setItem('ak.tema', t); } catch (e) { /* gizli pencere */ }
+    temaCiz();
+  });
+  temaCiz();
   const durum = (s, hata) => { $('durum').textContent = s; $('durum').className = hata ? 'hata' : ''; };
   const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
   const enc = new TextEncoder();
