@@ -58,6 +58,26 @@
     return;
   }
   const kayit = navigator.serviceWorker.register('sw.js');
+  // Yayın betiği doldurur: yeni eklenen kullanıcılar Pages güncellenene kadar (1-2 dk) GitHub'daki güncel kasadan da aranır.
+  const DEPO = {"sahip":"Ramazan9838","depo":"akademi_site","dal":"claude/intelligent-galileo-04shjz"};
+  async function guncelKasa() {
+    if (!DEPO) return null;
+    const yerel = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    const adres = yerel ? `${location.origin}/raw/${DEPO.sahip}/${DEPO.depo}/${DEPO.dal}/kasa.json`
+      : `https://api.github.com/repos/${DEPO.sahip}/${encodeURIComponent(DEPO.depo)}/contents/kasa.json?ref=${encodeURIComponent(DEPO.dal)}`;
+    const r = await fetch(adres, { cache: 'no-store', headers: yerel ? {} : { Accept: 'application/vnd.github.raw' } });
+    return r.ok ? r.json() : null;
+  }
+  async function kasadaAra(kasa, kullanici, parola) {
+    // Tüm anahtarlar aynı anda denenir (telefonda daha hızlı)
+    const denemeler = (kasa.anahtarlar || []).map((g) => dene(g, kullanici, parola, kasa.tekrar));
+    return new Promise((tamam) => {
+      let kalan = denemeler.length;
+      if (!kalan) tamam(null);
+      const bitti = () => { kalan -= 1; if (!kalan) tamam(null); };
+      denemeler.forEach((d) => d.then((r) => (r ? tamam(r) : bitti()), bitti));
+    });
+  }
 
   async function dene(giris, kullanici, parola, tekrar) {
     const temel = await crypto.subtle.importKey('raw', enc.encode(`${kullanici}\u0000${parola}`), 'PBKDF2', false, ['deriveKey']);
@@ -76,14 +96,12 @@
     try {
       const kasa = await (await fetch('kasa.json', { cache: 'no-cache' })).json();
       const kullanici = $('kullanici').value.trim().toLocaleLowerCase('tr-TR');
-      // Tüm anahtarlar aynı anda denenir (telefonda daha hızlı)
-      const denemeler = (kasa.anahtarlar || []).map((g) => dene(g, kullanici, $('parola').value, kasa.tekrar));
-      const bulunan = await new Promise((tamam) => {
-        let kalan = denemeler.length;
-        if (!kalan) tamam(null);
-        const bitti = () => { kalan -= 1; if (!kalan) tamam(null); };
-        denemeler.forEach((d) => d.then((r) => (r ? tamam(r) : bitti()), bitti));
-      });
+      let bulunan = await kasadaAra(kasa, kullanici, $('parola').value);
+      if (!bulunan) {
+        const guncel = await guncelKasa().catch(() => null);
+        const bilinen = new Set((kasa.anahtarlar || []).map((g) => g.sarili));
+        if (guncel) bulunan = await kasadaAra({ ...guncel, anahtarlar: (guncel.anahtarlar || []).filter((g) => !bilinen.has(g.sarili)) }, kullanici, $('parola').value);
+      }
       if (!bulunan) {
         durum('Kullanıcı adı veya şifre hatalı.', true);
         $('dugme').disabled = false;

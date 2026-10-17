@@ -9,3 +9,5 @@ Kaynak özel repoda tutulur ve `yayin/sifrele.mjs` ile buraya yayımlanır. Bu r
 
 - `index.html` giriş sayfası · `sw.js` dosyaları tarayıcıda çözen service worker
 - `k/` şifreli site dosyaları · `kasa.json` kullanıcıya özel sarılmış anahtarlar
+- `ilk-veri.bin` ilk (boş) şifreli veritabanı · `veri` dalı: `veri.bin`, güncel şifreli veritabanı. Uygulamadan yapılan
+  her kayıt orada yeni bir sürümdür (otomatik yedek). Dal, ilk kayıtta uygulama tarafından oluşturulur.
