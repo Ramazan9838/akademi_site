@@ -13,7 +13,7 @@ const TURLER = {
 const tur = (yol) => TURLER[yol.split('.').pop().toLowerCase()] || 'application/octet-stream';
 const metin = (s) => new TextEncoder().encode(s);
 // Yalnız şifreli statik dosyalar önbelleğe alınır. Güncel veritabanı hariçtir.
-const ONBELLEK = 'tgm-statik-ea10d69b5010d495';
+const ONBELLEK = 'tgm-statik-3b1dbe43d347dc8d';
 const statikMi = (yol) => yol.startsWith('assets/') ||
   ['yerel/sunucu.zip', 'yerel/isci.js'].includes(yol);
 
