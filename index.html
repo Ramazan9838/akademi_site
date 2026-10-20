@@ -80,7 +80,28 @@
     $('dugme').disabled = true;
     return;
   }
-  const kayit = navigator.serviceWorker.register('sw.js');
+  function sinirli(islem, ms, mesaj) {
+    let zamanlayici;
+    const zamanAsimi = new Promise((_, red) => {
+      zamanlayici = setTimeout(() => red(new Error(mesaj)), ms);
+    });
+    return Promise.race([islem, zamanAsimi]).finally(() => clearTimeout(zamanlayici));
+  }
+  async function jsonAl(adres, options = {}) {
+    const iptal = new AbortController();
+    const zamanlayici = setTimeout(() => iptal.abort(), 15000);
+    try {
+      const r = await fetch(adres, { ...options, signal: iptal.signal });
+      if (!r.ok) throw new Error('Giriş dosyası alınamadı (HTTP ' + r.status + ').');
+      return await r.json();
+    } catch (h) {
+      if (h.name === 'AbortError') throw new Error('Giriş dosyası indirilemedi. İnternet bağlantısını kontrol edip tekrar deneyin.');
+      throw h;
+    } finally { clearTimeout(zamanlayici); }
+  }
+  // Hata sayfa açılırken oluşsa bile yakalanır; girişte kullanıcıya bildirilir.
+  const kayit = navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+    .then((reg) => ({ reg }), (hata) => ({ hata }));
   // Yayın betiği doldurur: yeni eklenen kullanıcılar Pages güncellenene kadar (1-2 dk) GitHub'daki güncel kasadan da aranır.
   const DEPO = {"sahip":"Ramazan9838","depo":"akademi_site","dal":"claude/intelligent-galileo-04shjz"};
   async function guncelKasa() {
@@ -88,17 +109,15 @@
     const yerel = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
     const adres = yerel ? `${location.origin}/raw/${DEPO.sahip}/${DEPO.depo}/${DEPO.dal}/kasa.json`
       : `https://api.github.com/repos/${DEPO.sahip}/${encodeURIComponent(DEPO.depo)}/contents/kasa.json?ref=${encodeURIComponent(DEPO.dal)}`;
-    const r = await fetch(adres, { cache: 'no-store', headers: yerel ? {} : { Accept: 'application/vnd.github.raw' } });
-    return r.ok ? r.json() : null;
+    return jsonAl(adres, { cache: 'no-store', headers: yerel ? {} : { Accept: 'application/vnd.github.raw' } });
   }
   async function kasadaAra(kasa, kullanici, parola) {
-    // WebKit/Safari çok sayıda 600.000 turluk PBKDF2 işlemi aynı anda
-    // başlatıldığında kilitlenebilir. En fazla üç giriş aynı anda sınanır.
+    // WebKit'te ağır PBKDF2 işlemlerini sırayla çalıştır.
     const anahtarlar = kasa.anahtarlar || [];
-    for (let i = 0; i < anahtarlar.length; i += 3) {
-      const denemeler = await Promise.all(anahtarlar.slice(i, i + 3)
-        .map((g) => dene(g, kullanici, parola, kasa.tekrar)));
-      const bulunan = denemeler.find(Boolean);
+    for (let i = 0; i < anahtarlar.length; i++) {
+      durum('Kullanıcı doğrulanıyor… (' + (i + 1) + '/' + anahtarlar.length + ')');
+      const bulunan = await sinirli(dene(anahtarlar[i], kullanici, parola, kasa.tekrar), 30000,
+        'Şifre doğrulaması yanıt vermedi. Sayfayı yenileyip tekrar deneyin.');
       if (bulunan) return bulunan;
     }
     return null;
@@ -143,7 +162,7 @@
     $('dugme').disabled = true;
     durum('Doğrulanıyor… (birkaç saniye sürebilir)');
     try {
-      const kasa = await (await fetch('kasa.json', { cache: 'no-cache' })).json();
+      const kasa = await jsonAl('kasa.json', { cache: 'no-store' });
       const kullanici = $('kullanici').value.trim().toLocaleLowerCase('tr-TR');
       let bulunan = await kasadaAra(kasa, kullanici, $('parola').value);
       if (!bulunan) {
@@ -158,19 +177,25 @@
         return;
       }
       durum('Anahtar hazırlanıyor…');
-      const sure = (ms, mesaj) => new Promise((_, red) => setTimeout(() => red(new Error(mesaj)), ms));
-      await Promise.race([kayit, sure(15000, 'güvenlik bileşeni (service worker) yüklenemedi. Sayfayı yenileyip tekrar deneyin; uygulama içi tarayıcı (WhatsApp, Instagram vb.) yerine Chrome veya Safari kullanın.')]);
-      const reg = await Promise.race([navigator.serviceWorker.ready, sure(15000, 'güvenlik bileşeni etkinleşmedi. Sayfayı yenileyip tekrar deneyin.')]);
+      const sonuc = await sinirli(kayit, 15000, 'Güvenlik bileşeni yüklenemedi. Sayfayı yenileyip tekrar deneyin.');
+      if (sonuc.hata) throw sonuc.hata;
+      const reg = await sinirli(navigator.serviceWorker.ready, 15000, 'Güvenlik bileşeni etkinleşmedi. Sayfayı yenileyip tekrar deneyin.');
       const kanal = new MessageChannel();
       const yanit = new Promise((ok) => { kanal.port1.onmessage = (m) => ok(m.data); });
       const ham = b64(bulunan.ham);
       reg.active.postMessage({ tur: 'giris', ham: ham.buffer, uid: bulunan.u, entryId: bulunan.id, username: bulunan.n, kalici: $('kalici').checked }, [kanal.port2]);
-      const y = await Promise.race([yanit, sure(15000, 'anahtar bu tarayıcıda saklanamadı (gizli/özel pencere olabilir). Normal pencerede deneyin.')]);
+      let y;
+      try {
+        y = await sinirli(yanit, 15000, 'Oturum anahtarı kaydedilemedi. Normal Safari sekmesinden tekrar deneyin.');
+      } finally { kanal.port1.close(); }
       if (!y || !y.ok) throw new Error((y && y.hata) || 'anahtar kaydedilemedi');
       durum('Safari / tarayıcı güvenlik bileşeni hazırlanıyor…');
       await denetleyiciBekle(reg.active);
       durum('Açılıyor…');
-      location.replace(location.pathname.replace(/index\.html$/, ''));
+      // Aynı adrese yönlendirme Safari'de mevcut giriş belgesinde kalmasın.
+      const hedef = new URL(location.pathname.replace(/index\.html$/, ''), location.origin);
+      hedef.searchParams.set('giris', Date.now().toString(36));
+      location.replace(hedef.href);
     } catch (h) {
       durum(`Giriş tamamlanamadı: ${h.message || h}`, true);
       $('dugme').disabled = false;
@@ -180,3 +205,4 @@
 </script>
 </body>
 </html>
+
