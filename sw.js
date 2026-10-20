@@ -13,7 +13,7 @@ const TURLER = {
 const tur = (yol) => TURLER[yol.split('.').pop().toLowerCase()] || 'application/octet-stream';
 const metin = (s) => new TextEncoder().encode(s);
 // Yalnız şifreli statik dosyalar önbelleğe alınır. Güncel veritabanı hariçtir.
-const ONBELLEK = 'tgm-statik-b424379b85d1149d';
+const ONBELLEK = 'tgm-statik-8bc8f1636b3b9f3d';
 const statikMi = (yol) => yol.startsWith('assets/') ||
   ['yerel/sunucu.zip', 'yerel/isci.js'].includes(yol);
 
@@ -22,19 +22,40 @@ const statikMi = (yol) => yol.startsWith('assets/') ||
 const DB_ADI = `kasa:${KAPSAM.pathname}`;
 function db() {
   return new Promise((ok, hata) => {
-    const r = indexedDB.open(DB_ADI, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('s');
+    let r;
+    try { r = indexedDB.open(DB_ADI, 1); } catch (e) { hata(e); return; }
+    r.onupgradeneeded = () => {
+      if (!r.result.objectStoreNames.contains('s')) r.result.createObjectStore('s');
+    };
     r.onsuccess = () => ok(r.result);
-    r.onerror = () => hata(r.error);
+    r.onerror = () => hata(r.error || new Error('IndexedDB açılamadı'));
+    r.onblocked = () => hata(new Error('Oturum deposu başka bir sekmede meşgul'));
   });
 }
 async function depo(islem, deger) {
   const d = await db();
+  // Safari/WebKit: IDBRequest.onsuccess, readwrite transaction'ın diske
+  // yazıldığı anlamına GELMEZ. Gezinmeden önce tx.oncomplete beklenmeli.
   return new Promise((ok, hata) => {
-    const s = d.transaction('s', islem === 'al' ? 'readonly' : 'readwrite').objectStore('s');
-    const r = islem === 'al' ? s.get('k') : islem === 'yaz' ? s.put(deger, 'k') : s.delete('k');
-    r.onsuccess = () => ok(r.result ?? null);
-    r.onerror = () => hata(r.error);
+    let tamamlandi = false;
+    const bitir = (error, result) => {
+      if (tamamlandi) return;
+      tamamlandi = true;
+      d.close();
+      if (error) hata(error);
+      else ok(result ?? null);
+    };
+    let sonuc = null;
+    try {
+      const tx = d.transaction('s', islem === 'al' ? 'readonly' : 'readwrite');
+      tx.oncomplete = () => bitir(null, sonuc);
+      tx.onabort = () => bitir(tx.error || new Error('Oturum kaydı iptal edildi'));
+      tx.onerror = () => {}; // tx.onabort asıl hata sonucunu iletir
+      const s = tx.objectStore('s');
+      const r = islem === 'al' ? s.get('k') : islem === 'yaz' ? s.put(deger, 'k') : s.delete('k');
+      r.onsuccess = () => { sonuc = r.result ?? null; };
+      r.onerror = () => {}; // hata tx.onabort ile raporlanır
+    } catch (e) { bitir(e); }
   });
 }
 let ANAHTAR = null; // { aes, mac, bitis, uid, entryId, username }
@@ -69,7 +90,18 @@ self.addEventListener('message', (e) => {
         await cikis();
         cevapla({ ok: true });
       }
-    } catch (h) { cevapla({ ok: false, hata: String(h) }); }
+    } catch (h) {
+      // Safari'nin bazı sürümlerinde CryptoKey -> IndexedDB klonlama
+      // DataCloneError ile reddedilebilir. Şifreleme anahtarını düz metin
+      // depolayarak güvenliği düşürmek yerine açıklayıcı hata göster.
+      const depolamaSorunu = h && (h.name === 'DataCloneError' || /DataCloneError/i.test(String(h)));
+      cevapla({
+        ok: false,
+        hata: depolamaSorunu
+          ? 'Safari güvenli oturum anahtarını kaydedemedi. Safari sürümünü güncelleyin ve özel pencere yerine normal sekmeden tekrar deneyin.'
+          : String(h),
+      });
+    }
   })());
 });
 

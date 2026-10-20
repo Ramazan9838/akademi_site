@@ -92,14 +92,16 @@
     return r.ok ? r.json() : null;
   }
   async function kasadaAra(kasa, kullanici, parola) {
-    // Tüm anahtarlar aynı anda denenir (telefonda daha hızlı)
-    const denemeler = (kasa.anahtarlar || []).map((g) => dene(g, kullanici, parola, kasa.tekrar));
-    return new Promise((tamam) => {
-      let kalan = denemeler.length;
-      if (!kalan) tamam(null);
-      const bitti = () => { kalan -= 1; if (!kalan) tamam(null); };
-      denemeler.forEach((d) => d.then((r) => (r ? tamam(r) : bitti()), bitti));
-    });
+    // WebKit/Safari çok sayıda 600.000 turluk PBKDF2 işlemi aynı anda
+    // başlatıldığında kilitlenebilir. En fazla üç giriş aynı anda sınanır.
+    const anahtarlar = kasa.anahtarlar || [];
+    for (let i = 0; i < anahtarlar.length; i += 3) {
+      const denemeler = await Promise.all(anahtarlar.slice(i, i + 3)
+        .map((g) => dene(g, kullanici, parola, kasa.tekrar)));
+      const bulunan = denemeler.find(Boolean);
+      if (bulunan) return bulunan;
+    }
+    return null;
   }
 
   async function dene(giris, kullanici, parola, tekrar) {
@@ -110,6 +112,30 @@
       const duz = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.subarray(0, 12), additionalData: enc.encode('anahtar') }, k, b.subarray(12));
       return { ...JSON.parse(new TextDecoder().decode(duz)), id: giris.id };
     } catch { return null; }
+  }
+
+  function denetleyiciBekle(aktif) {
+    // navigator.serviceWorker.ready sadece aktif işçi olduğunu gösterir;
+    // ilk Safari girişinde sayfanın henüz kontrol edildiği anlamına gelmez.
+    if (navigator.serviceWorker.controller === aktif) return Promise.resolve();
+    return new Promise((ok, red) => {
+      let zamanlayici;
+      const temizle = () => {
+        clearTimeout(zamanlayici);
+        navigator.serviceWorker.removeEventListener('controllerchange', kontrol);
+      };
+      const kontrol = () => {
+        if (navigator.serviceWorker.controller !== aktif) return;
+        temizle();
+        ok();
+      };
+      navigator.serviceWorker.addEventListener('controllerchange', kontrol);
+      zamanlayici = setTimeout(() => {
+        temizle();
+        red(new Error('Safari güvenlik bileşeni sayfayı henüz devralamadı. Sayfayı yenileyip tekrar giriş yapın.'));
+      }, 15000);
+      kontrol();
+    });
   }
 
   $('giris').addEventListener('submit', async (e) => {
@@ -141,6 +167,8 @@
       reg.active.postMessage({ tur: 'giris', ham: ham.buffer, uid: bulunan.u, entryId: bulunan.id, username: bulunan.n, kalici: $('kalici').checked }, [kanal.port2]);
       const y = await Promise.race([yanit, sure(15000, 'anahtar bu tarayıcıda saklanamadı (gizli/özel pencere olabilir). Normal pencerede deneyin.')]);
       if (!y || !y.ok) throw new Error((y && y.hata) || 'anahtar kaydedilemedi');
+      durum('Safari / tarayıcı güvenlik bileşeni hazırlanıyor…');
+      await denetleyiciBekle(reg.active);
       durum('Açılıyor…');
       location.replace(location.pathname.replace(/index\.html$/, ''));
     } catch (h) {
