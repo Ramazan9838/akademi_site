@@ -133,30 +133,6 @@
     } catch { return null; }
   }
 
-  function denetleyiciBekle(aktif) {
-    // navigator.serviceWorker.ready sadece aktif işçi olduğunu gösterir;
-    // ilk Safari girişinde sayfanın henüz kontrol edildiği anlamına gelmez.
-    if (navigator.serviceWorker.controller === aktif) return Promise.resolve();
-    return new Promise((ok, red) => {
-      let zamanlayici;
-      const temizle = () => {
-        clearTimeout(zamanlayici);
-        navigator.serviceWorker.removeEventListener('controllerchange', kontrol);
-      };
-      const kontrol = () => {
-        if (navigator.serviceWorker.controller !== aktif) return;
-        temizle();
-        ok();
-      };
-      navigator.serviceWorker.addEventListener('controllerchange', kontrol);
-      zamanlayici = setTimeout(() => {
-        temizle();
-        red(new Error('Safari güvenlik bileşeni sayfayı henüz devralamadı. Sayfayı yenileyip tekrar giriş yapın.'));
-      }, 15000);
-      kontrol();
-    });
-  }
-
   $('giris').addEventListener('submit', async (e) => {
     e.preventDefault();
     $('dugme').disabled = true;
@@ -189,9 +165,11 @@
         y = await sinirli(yanit, 15000, 'Oturum anahtarı kaydedilemedi. Normal Safari sekmesinden tekrar deneyin.');
       } finally { kanal.port1.close(); }
       if (!y || !y.ok) throw new Error((y && y.hata) || 'anahtar kaydedilemedi');
-      durum('Safari / tarayıcı güvenlik bileşeni hazırlanıyor…');
-      await denetleyiciBekle(reg.active);
       durum('Açılıyor…');
+      // Oturum kaydı transaction tamamlanınca onaylanır. İlk iOS sayfası
+      // clients.claim() ile kontrol edilmemiş olsa da yeni gezinme kapsamla
+      // eşleşen aktif işçiye gider. Eski belgenin controller'ını beklemek,
+      // başarılı oturumu gereksiz yere engeller; anahtar/parola URL'ye yazılmaz.
       // Aynı adrese yönlendirme Safari'de mevcut giriş belgesinde kalmasın.
       const hedef = new URL(location.pathname.replace(/index\.html$/, ''), location.origin);
       hedef.searchParams.set('giris', Date.now().toString(36));
@@ -205,4 +183,5 @@
 </script>
 </body>
 </html>
+
 
