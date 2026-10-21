@@ -13,7 +13,7 @@ const TURLER = {
 const tur = (yol) => TURLER[yol.split('.').pop().toLowerCase()] || 'application/octet-stream';
 const metin = (s) => new TextEncoder().encode(s);
 // Yalnız şifreli statik dosyalar önbelleğe alınır. Güncel veritabanı hariçtir.
-const ONBELLEK = 'tgm-statik-3003513bd20eb9f4';
+const ONBELLEK = 'tgm-statik-6f3b8454eb4ceca1';
 const statikMi = (yol) => yol.startsWith('assets/') ||
   ['yerel/sunucu.zip', 'yerel/isci.js'].includes(yol);
 
@@ -152,6 +152,7 @@ self.addEventListener('fetch', (e) => {
   let yol;
   try { yol = decodeURIComponent(u.pathname.slice(KAPSAM.pathname.length)); } catch { return; }
   if (yol === '' || yol.endsWith('/')) yol += 'index.html';
-  if (ACIK.has(yol) || yol.startsWith('k/')) return;
+  if (ACIK.has(yol) || yol.startsWith('k/') || yol.startsWith('runtime/pyodide/')) return;
   e.respondWith(cevap(e.request, yol));
 });
+
